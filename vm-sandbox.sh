@@ -47,3 +47,4 @@ create_floppy
 build_vbox_vm
 update_hosts_file
 wait_for_vm
+vm_emptydrive

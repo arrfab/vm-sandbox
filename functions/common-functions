@@ -82,7 +82,7 @@ function update_hosts_file {
 }
 
 function wait_for_vm {
-  f_log "Testing if Virtual Machines sshd is listening ..."
+  f_log "Testing if ${vm_name} is provisioned, restarted and sshd is listening ..."
   while true;
   do 
     >/dev/null 2>&1 >/dev/tcp/${vm_ip}/22
@@ -92,4 +92,11 @@ function wait_for_vm {
     sleep 2
   done
   notify-send -t 10000 "Your new VM ${vm_name} is restarted and available ..."
+}
+
+function vm_emptydrive {
+   f_log "Ejecting boot.iso and virtual floppy image from ${vm_name} VM ..."
+   vboxmanage storageattach ${vm_name} --storagectl ide1 --port 1 --medium emptydrive --device 0 --type dvddrive    
+   vboxmanage storageattach ${vm_name} --storagectl fdd1 --medium emptydrive --device 0 --type fdd  
+   /bin/rm ${tmppath}/floppy-$$.img
 }
