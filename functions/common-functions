@@ -1,0 +1,95 @@
+#!/bin/bash
+
+function usage {
+
+cat <<  EOF
+
+You need to call the script like this : $0 -arguments
+
+        -d : CentOS distro release (required, default:none, values : [5,6])
+        -n : name of the virtual machine to create
+        -i : IP address to assign to the Virtual Machine 
+        -g : Vbox gui type (optional, default:headless, values : [headless,gui])
+        -h : display this help
+
+EOF
+
+}
+
+function varcheck {
+if [ -z "$1" ] ; then
+        usage
+        exit 1
+fi
+
+}
+
+function f_log
+{
+	printf "[+] VM-sandbox -> $*\n"
+}
+
+function build_vbox_vm {
+   f_log "Creating Virtual Box VM ${vm_name} ..."
+   vboxmanage createvm --name ${vm_name} --register --ostype RedHat_64  
+   vboxmanage modifyvm ${vm_name} --memory ${vm_memory} --cpus 1 --pae on --boot1 disk --boot2 dvd --nic1 hostonly --nictype1 82543GC --hostonlyadapter1 vboxnet0  
+   #vboxmanage modifyvm ${vm_name} --memory ${vm_memory} --cpus 1 --pae on --boot1 disk --boot2 dvd --nic1 natnetwork --nictype1 82543GC --nat-network1 CentOSNet 
+   vboxmanage storagectl ${vm_name} --name sata1 --add sata --controller IntelAhci --hostiocache on  
+   vboxmanage createhd --filename ${vdipath}/${vm_name} --size ${vm_disk_size} --format VDI --variant Standard   
+   vboxmanage storageattach ${vm_name} --storagectl sata1 --port 1 --medium ${vdipath}/${vm_name}.vdi --device 0 --type hdd  
+   vboxmanage storagectl ${vm_name} --name ide1 --add ide --controller PIIX3  --bootable on  
+   vboxmanage storageattach ${vm_name} --storagectl ide1 --port 1 --medium $(find ${baserepo_path}/${dist}/os/x86_64/images/ -name '*.iso') --device 0 --type dvddrive  
+   vboxmanage storagectl ${vm_name} --name fdd1 --add floppy  
+   vboxmanage storageattach ${vm_name} --storagectl fdd1 --medium ${tmppath}/floppy-$$.img --device 0 --type fdd  
+   
+   vboxmanage startvm ${vm_name} --type ${gui_type}  
+   sleep 3 
+     vboxmanage controlvm ${vm_name} keyboardputscancode 01 81
+   sleep 1 
+   for letter in 26 a6 17 97 31 b1 16 96 2d ad 39 b9 25 a5 1f 9f 0d 8d 21 a1 26 a6 18 98 19 99 19 99 15 95 1c 9c ;
+     do
+     #sleep 1
+     vboxmanage controlvm ${vm_name} keyboardputscancode ${letter} 
+   done
+	
+}
+
+function create_floppy {
+
+  # producing a virtual floppy
+  dd if=/dev/zero of=${tmppath}/floppy-$$.img bs=1k count=1440 
+  sudo mkfs.vfat ${tmppath}/floppy-$$.img  
+  test -d ${tmppath}/mountfloppy || mkdir ${tmppath}/mountfloppy
+  sudo mount -o loop ${tmppath}/floppy-$$.img ${tmppath}/mountfloppy
+  sudo cp c${dist}.cfg ${tmppath}/mountfloppy/ks.cfg
+  sudo sed -i s/{vm_name}/${vm_name}/g ${tmppath}/mountfloppy/ks.cfg
+  sudo sed -i s/{vm_dns_domain}/${vm_dns_domain}/g ${tmppath}/mountfloppy/ks.cfg
+  sudo sed -i s/{vm_ip}/${vm_ip}/g ${tmppath}/mountfloppy/ks.cfg
+  sudo sed -i s/{vm_netmask}/${vm_netmask}/g ${tmppath}/mountfloppy/ks.cfg
+  sudo sed -i s/{vm_gateway}/${vm_gateway}/g ${tmppath}/mountfloppy/ks.cfg
+  sudo sed -i s/{vm_dns_server}/${vm_dns_server}/g ${tmppath}/mountfloppy/ks.cfg
+  sudo sed -i s#{baserepo_url}#${baserepo_url}#g ${tmppath}/mountfloppy/ks.cfg
+ 
+  sudo umount ${tmppath}/mountfloppy
+
+}
+
+
+function update_hosts_file {
+  f_log "Updating local host file with sudo right ..."
+  sudo su -c "echo ${vm_ip} ${vm_name} ${vm_name}.${vm_dns_domain} >> /etc/hosts"
+  sudo service dnsmasq reload
+}
+
+function wait_for_vm {
+  f_log "Testing if Virtual Machines sshd is listening ..."
+  while true;
+  do 
+    >/dev/null 2>&1 >/dev/tcp/${vm_ip}/22
+    if [ "$?" = "0" ]; then
+      break
+    fi
+    sleep 2
+  done
+  notify-send -t 10000 "Your new VM ${vm_name} is restarted and available ..."
+}
