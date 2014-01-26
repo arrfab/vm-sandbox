@@ -24,25 +24,46 @@ fi
 
 }
 
-function f_log
-{
-	printf "[+] VM-sandbox -> $*\n"
+function f_log {
+	printf "[+] VM-sandbox -> $*"
+}
+
+function f_errorcheck {
+ if [ "$?" = "0" ]; then
+   echo -ne "$(color green) Passed $(icon check)$(color end) \n"
+
+ else
+   echo -ne "$(color red) Fail $(icon x)$(color end) \n"
+   exit 1
+ fi
 }
 
 function build_vbox_vm {
    f_log "Creating Virtual Box VM ${vm_name} ..."
-   vboxmanage createvm --name ${vm_name} --register --ostype RedHat_64  
-   vboxmanage modifyvm ${vm_name} --memory ${vm_memory} --cpus 1 --pae on --boot1 disk --boot2 dvd --nic1 hostonly --nictype1 82543GC --hostonlyadapter1 vboxnet0  
-   #vboxmanage modifyvm ${vm_name} --memory ${vm_memory} --cpus 1 --pae on --boot1 disk --boot2 dvd --nic1 natnetwork --nictype1 82543GC --nat-network1 CentOSNet 
-   vboxmanage storagectl ${vm_name} --name sata1 --add sata --controller IntelAhci --hostiocache on  
-   vboxmanage createhd --filename ${vdipath}/${vm_name} --size ${vm_disk_size} --format VDI --variant Standard   
-   vboxmanage storageattach ${vm_name} --storagectl sata1 --port 1 --medium ${vdipath}/${vm_name}.vdi --device 0 --type hdd  
-   vboxmanage storagectl ${vm_name} --name ide1 --add ide --controller PIIX3  --bootable on  
-   vboxmanage storageattach ${vm_name} --storagectl ide1 --port 1 --medium $(find ${baserepo_path}/${dist}/os/x86_64/images/ -name '*.iso') --device 0 --type dvddrive  
-   vboxmanage storagectl ${vm_name} --name fdd1 --add floppy  
-   vboxmanage storageattach ${vm_name} --storagectl fdd1 --medium ${tmppath}/floppy-$$.img --device 0 --type fdd  
+   vboxmanage createvm --name ${vm_name} --register --ostype RedHat_64  >/dev/null 2>&1
+   f_errorcheck
+
+   vboxmanage modifyvm ${vm_name} --memory ${vm_memory} --cpus 1 --pae on --boot1 disk --boot2 dvd --nic1 hostonly --nictype1 82543GC --hostonlyadapter1 vboxnet0  >/dev/null 2>&1
+   f_log "Creating a Virtual Hard-disk for ${vm_name} ..."
+   vboxmanage storagectl ${vm_name} --name sata1 --add sata --controller IntelAhci --hostiocache on  >/dev/null 2>&1
+   vboxmanage createhd --filename ${vdipath}/${vm_name} --size ${vm_disk_size} --format VDI --variant Standard  >/dev/null 2>&1
+   f_errorcheck
+
+  vboxmanage storageattach ${vm_name} --storagectl sata1 --port 1 --medium ${vdipath}/${vm_name}.vdi --device 0 --type hdd  >/dev/null 2>&1
+   vboxmanage storagectl ${vm_name} --name ide1 --add ide --controller PIIX3  --bootable on  >/dev/null 2>&1
    
-   vboxmanage startvm ${vm_name} --type ${gui_type}  
+   f_log "Attaching the boot.iso file to the VM .."
+   vboxmanage storageattach ${vm_name} --storagectl ide1 --port 1 --medium $(find ${baserepo_path}/${dist}/os/x86_64/images/ -name '*.iso') --device 0 --type dvddrive >/dev/null 2>&1 
+   f_errorcheck 
+
+   f_log "Attaching the produced virtual floppy image ..."
+   vboxmanage storagectl ${vm_name} --name fdd1 --add floppy  >/dev/null 2>&1
+   vboxmanage storageattach ${vm_name} --storagectl fdd1 --medium ${tmppath}/floppy-$$.img --device 0 --type fdd >/dev/null 2>&1 
+   f_errorcheck
+
+   f_log "Starting the Virtual Machine ${vm_name} ..."
+   vboxmanage startvm ${vm_name} --type ${gui_type} >/dev/null 2>&1
+   f_errorcheck 
    sleep 3 
      vboxmanage controlvm ${vm_name} keyboardputscancode 01 81
    sleep 1 
@@ -57,8 +78,12 @@ function build_vbox_vm {
 function create_floppy {
 
   # producing a virtual floppy
-  dd if=/dev/zero of=${tmppath}/floppy-$$.img bs=1k count=1440 
-  sudo mkfs.vfat ${tmppath}/floppy-$$.img  
+  f_log "Creating a virtual floopy image ..."
+  dd if=/dev/zero of=${tmppath}/floppy-$$.img bs=1k count=1440 >/dev/null 2>&1
+  f_errorcheck
+  f_log "Formatting that virtual floppy image ..."
+  sudo mkfs.vfat ${tmppath}/floppy-$$.img  >/dev/null 2>&1
+  f_errorcheck
   test -d ${tmppath}/mountfloppy || mkdir ${tmppath}/mountfloppy
   sudo mount -o loop ${tmppath}/floppy-$$.img ${tmppath}/mountfloppy
   sudo cp c${dist}.cfg ${tmppath}/mountfloppy/ks.cfg
@@ -78,11 +103,14 @@ function create_floppy {
 function update_hosts_file {
   f_log "Updating local host file with sudo right ..."
   sudo su -c "echo ${vm_ip} ${vm_name} ${vm_name}.${vm_dns_domain} >> /etc/hosts"
-  sudo service dnsmasq reload
+  f_errorcheck
+  f_log "Reloading dnsmasq service ..."
+  sudo service dnsmasq reload >/dev/null 2>&1
+  f_errorcheck
 }
 
 function wait_for_vm {
-  f_log "Testing if ${vm_name} is provisioned, restarted and sshd is listening ..."
+  f_log "Waiting for ${vm_name} to be provisioned, restarted and sshd ready ..."
   while true;
   do 
     >/dev/null 2>&1 >/dev/tcp/${vm_ip}/22
@@ -91,12 +119,26 @@ function wait_for_vm {
     fi
     sleep 2
   done
-  notify-send -t 10000 "Your new VM ${vm_name} is restarted and available ..."
+  f_errorcheck
+  f_log "Your new VM ${vm_name} is restarted and available ..."
+  notify-send -t 20000 "Your new VM ${vm_name} is restarted and available ..."
 }
 
 function vm_emptydrive {
-   f_log "Ejecting boot.iso and virtual floppy image from ${vm_name} VM ..."
+   f_log "Ejecting boot.iso from ${vm_name} VM ..."
    vboxmanage storageattach ${vm_name} --storagectl ide1 --port 1 --medium emptydrive --device 0 --type dvddrive    
+   f_errorcheck
+   f_log "Ejecting virtual floppy image from ${vm_name} VM ..."
    vboxmanage storageattach ${vm_name} --storagectl fdd1 --medium emptydrive --device 0 --type fdd  
+   f_errorcheck
+   f_log "Deleting temporary floppy virtual image ..."
    /bin/rm ${tmppath}/floppy-$$.img
+   f_errorcheck
 }
+
+function ssh_keygen_clean {
+  f_log "Cleaning-up ~/.ssh/config to avoid warnings when reprovisioning the same host ..."
+  ssh-keygen -R ${vm_name} >/dev/null 2>&1
+  f_errorcheck
+  ssh-keygen -R ${vm_name}.${vm_dns_domain} >/dev/null 2>&1
+} 

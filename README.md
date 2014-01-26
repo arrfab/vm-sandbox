@@ -15,7 +15,7 @@ The process is easy and *doesn't* involve a pxe boot :
 
 ## Configuration
 There is a minimal settings.cfg file that you need to use, like for example where to find locally your centos mirror (self-explained)
-
+If you need the initial root password, it's "vm4me"
 
 ## Usage
 > ./vm-sandbox.sh -h

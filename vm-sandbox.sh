@@ -1,4 +1,5 @@
 #!/bin/bash
+clear
 
 source $(dirname $0)/functions/common-functions
 source $(dirname $0)/functions/shml.sh
@@ -48,3 +49,4 @@ build_vbox_vm
 update_hosts_file
 wait_for_vm
 vm_emptydrive
+ssh_keygen_clean
