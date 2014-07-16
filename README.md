@@ -4,8 +4,8 @@ Stupid scripts to quickly provision CentOS 5/6 VirtualBox VMs on a laptop/workst
 The process is easy and *doesn't* involve a pxe boot :
 * find the correct boot.iso for the version you want to install
 * create a floppy disk with a templated kickstart
-* create a virtualbox VM and attach the boot.iso and the floopy
-* boot the vm and type 'linux ks=floppy' at the prompt, to read the ks.cfg file and proceed to installation
+* create a virtualbox VM and attach the boot.iso and the floopy (floopy deprecated and not working anymore for el7)
+* boot the vm and type 'linux ks=floppy' or 'linux inst.ks=http://path.to.your.ks.repo' at the prompt, to read the ks.cfg file and proceed to installation
 
 ## Requirements
 * You need VirtualBox on your laptop/workstation.

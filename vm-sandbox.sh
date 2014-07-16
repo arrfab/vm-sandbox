@@ -45,6 +45,7 @@ fi
 
 #building the VirtualBox VM
 create_floppy
+key_seq_producer
 build_vbox_vm
 update_hosts_file
 wait_for_vm

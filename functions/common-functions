@@ -6,7 +6,7 @@ cat <<  EOF
 
 You need to call the script like this : $0 -arguments
 
-        -d : CentOS distro release (required, default:none, values : [5,6])
+        -d : CentOS distro release (required, default:none, values : [5,6,7])
         -n : name of the virtual machine to create
         -i : IP address to assign to the Virtual Machine 
         -g : Vbox gui type (optional, default:headless, values : [headless,gui])
@@ -62,17 +62,32 @@ function build_vbox_vm {
    f_errorcheck
 
    f_log "Starting the Virtual Machine ${vm_name} ..."
-   vboxmanage startvm ${vm_name} --type ${gui_type} >/dev/null 2>&1
+   vboxmanage -q startvm ${vm_name} --type ${gui_type} >/dev/null 2>&1
    f_errorcheck 
-   sleep 3 
+   sleep 3
+     # Pressing/releasing escape key 
      vboxmanage controlvm ${vm_name} keyboardputscancode 01 81
    sleep 1 
-   for letter in 26 a6 17 97 31 b1 16 96 2d ad 39 b9 25 a5 1f 9f 0d 8d 21 a1 26 a6 18 98 19 99 19 99 15 95 1c 9c ;
+
+   # Typing "linux ks=floppy"/"linux inst.ks=floppy" at the isolinux prompt
+   # See http://humbledown.org/keyboard-scancodes.xhtml on how to "guess" those keys
+   for letter in ${key_seq} ;
      do
      #sleep 1
      vboxmanage controlvm ${vm_name} keyboardputscancode ${letter} 
    done
 	
+}
+
+function key_seq_producer {
+  if [ "${dist}" = "7" ] ; then
+    key_seq=$(echo "linux inst.ks=${ks_store_url}/${vm_name}.cfg" | $(dirname $0)/scancodes)
+    # export key_seq="26 a6 17 97 31 b1 16 96 2d ad 39 b9 17 97 31 b1 1f 9f 14 94 34 b4 25 a5 1f 9f 0d 8d 23 a3 14 94 14 94 19 99 2a 27 a7 aa 35 b5 35 b5 02 82 0a 8a 03 83 34 b4 02 82 07 87 09 89 34 b4 06 86 07 87 34 b4 03 83 35 b5 25 a5 1f 9f 35 b5 25 a5 1f 9f 34 b4 2e ae 21 a1 22 a2 1c 9c"
+  else
+     export key_seq="26 a6 17 97 31 b1 16 96 2d ad 39 b9 25 a5 1f 9f 0d 8d 21 a1 26 a6 18 98 19 99 19 99 15 95 1c 9c"
+  fi
+ 
+
 }
 
 function create_floppy {
@@ -94,7 +109,7 @@ function create_floppy {
   sudo sed -i s/{vm_gateway}/${vm_gateway}/g ${tmppath}/mountfloppy/ks.cfg
   sudo sed -i s/{vm_dns_server}/${vm_dns_server}/g ${tmppath}/mountfloppy/ks.cfg
   sudo sed -i s#{baserepo_url}#${baserepo_url}#g ${tmppath}/mountfloppy/ks.cfg
- 
+  sudo cp ${tmppath}/mountfloppy/ks.cfg /var/www/html/ks/${vm_name}.cfg
   sudo umount ${tmppath}/mountfloppy
 
 }
@@ -105,7 +120,7 @@ function update_hosts_file {
   sudo su -c "echo ${vm_ip} ${vm_name} ${vm_name}.${vm_dns_domain} >> /etc/hosts"
   f_errorcheck
   f_log "Reloading dnsmasq service ..."
-  sudo service dnsmasq reload >/dev/null 2>&1
+  sudo service dnsmasq restart >/dev/null 2>&1
   f_errorcheck
 }
 
@@ -126,10 +141,10 @@ function wait_for_vm {
 
 function vm_emptydrive {
    f_log "Ejecting boot.iso from ${vm_name} VM ..."
-   vboxmanage storageattach ${vm_name} --storagectl ide1 --port 1 --medium emptydrive --device 0 --type dvddrive    
+   vboxmanage storageattach ${vm_name} --storagectl ide1 --port 1 --medium emptydrive --device 0 --type dvddrive --forceunmount 
    f_errorcheck
    f_log "Ejecting virtual floppy image from ${vm_name} VM ..."
-   vboxmanage storageattach ${vm_name} --storagectl fdd1 --medium emptydrive --device 0 --type fdd  
+   vboxmanage storageattach ${vm_name} --storagectl fdd1 --medium emptydrive --device 0 --type fdd --forceunmount
    f_errorcheck
    f_log "Deleting temporary floppy virtual image ..."
    /bin/rm ${tmppath}/floppy-$$.img
@@ -141,4 +156,5 @@ function ssh_keygen_clean {
   ssh-keygen -R ${vm_name} >/dev/null 2>&1
   f_errorcheck
   ssh-keygen -R ${vm_name}.${vm_dns_domain} >/dev/null 2>&1
+  ssh-keygen -R ${vm_ip} >/dev/null 2>&1
 } 
